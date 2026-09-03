@@ -1,29 +1,45 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { defineTool } from '@deepseek-ai/dsh-tools'
 
 export const name = 'web-agent'
-export const inject = ['browser']
+export const inject = ['tools', 'browser']
 
 export interface Config {
   readonly deepseekUrl?: string
 }
 
-/**
- * M0 intentionally does one thing: expose a small, verifiable entry point
- * that can use the shared `ctx.browser` capability. Browser implementation
- * and Electron hosting remain provider-owned; this plugin does not reach into
- * private Electron APIs.
- */
+/** M0: expose one explicit tool that opens the real DeepSeek Web browser. */
 export function apply(ctx: Context, config: Config = {}): void {
-  const url = config.deepseekUrl ?? 'https://chat.deepseek.com'
-  const browser = ctx.get('browser')
+  const deepseekUrl = config.deepseekUrl ?? 'https://chat.deepseek.com/'
 
-  if (browser === undefined) {
-    throw new Error('web-agent: ctx.browser is unavailable; install a compatible browser provider first')
-  }
-
-  ctx.command('web-agent.open', 'Open DeepSeek Web in the real browser').action(async ({ options }: any) => {
-    const session = await browser.open('web-agent')
-    await browser.openUrl(session, { url: options?.url ?? url })
-    return `DeepSeek Web opened: ${url}`
-  })
+  ctx.tools.register(defineTool({
+    name: 'web_agent_open_deepseek',
+    description: 'Open the real DeepSeek Web site in the persistent browser window. Use this before interacting with DeepSeek Web.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          url: { type: 'string', required: true },
+          title: { type: 'string' },
+        },
+      },
+    },
+    timeoutMs: 60_000,
+    isConcurrencySafe: () => false,
+    async execute(_args, exec) {
+      const browser = ctx.get('browser')
+      if (browser === undefined) {
+        throw new Error('web-agent: browser service unavailable; check that dsh-builtin-browser is mounted')
+      }
+      const session = await browser.open(exec?.agent?.id ?? 'web-agent')
+      await browser.openUrl(session, { url: deepseekUrl }, exec.signal)
+      const snapshot = await browser.snapshot(session, exec.signal)
+      return {
+        url: snapshot.url,
+        ...(snapshot.title !== undefined ? { title: snapshot.title } : {}),
+      }
+    },
+  }))
 }
