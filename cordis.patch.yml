@@ -1,3 +1,12 @@
+# Mount the verified real-browser stack, then add Web-Agent's DeepSeek entry tool.
 - insert:
+    - id: browser
+      name: dsh-builtin-browser/browser
+    - id: browser-electron
+      name: dsh-builtin-browser/browser-electron
+      config:
+        viewHost: !!js ctx.get('electronViewHost')
+    - id: tool-browser
+      name: dsh-builtin-browser/tool-browser
     - id: web-agent
       name: dsh-web-agent
