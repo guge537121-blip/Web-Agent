@@ -1,0 +1,22 @@
+{
+  "name": "dsh-web-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Real DeepSeek Web Agent capability for DeepSeek Harness",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "latest",
+    "@deepseek-ai/dsh": "latest",
+    "@deepseek-ai/dsh-tools": "latest"
+  },
+  "devDependencies": {
+    "typescript": "latest"
+  }
+}
