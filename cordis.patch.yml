@@ -1,0 +1,3 @@
+- insert:
+    - id: web-agent
+      name: dsh-web-agent
