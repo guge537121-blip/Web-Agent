@@ -9,7 +9,8 @@
     "declaration": true,
     "outDir": "lib",
     "rootDir": "src",
-    "sourceMap": true
+    "sourceMap": true,
+    "jsx": "react-jsx"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }
