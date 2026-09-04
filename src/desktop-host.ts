@@ -1,16 +1,16 @@
 import type { Context } from '@deepseek-ai/cordis'
 
-export type BrowserHostMode = 'embedded' | 'standalone'
-
 /**
- * DSH Desktop owns Electron/WebContentsView. Web-Agent must never reach into
- * Electron directly. dsh-builtin-browser consumes the optional public
- * `electronViewHost` capability when the Desktop host provides it.
+ * Web-Agent intentionally uses a separate visible browser workspace.
+ * It does not attempt to embed a WebContentsView into DSH Desktop.
+ * The browser provider owns one visible workspace shared by the human and agent.
  */
-export function getBrowserHostMode(ctx: Context): BrowserHostMode {
-  return ctx.get('electronViewHost') === undefined ? 'standalone' : 'embedded'
+export type BrowserHostMode = 'workspace'
+
+export function getBrowserHostMode(_ctx: Context): BrowserHostMode {
+  return 'workspace'
 }
 
-export function hasEmbeddedBrowserHost(ctx: Context): boolean {
-  return getBrowserHostMode(ctx) === 'embedded'
+export function hasEmbeddedBrowserHost(_ctx: Context): boolean {
+  return false
 }
