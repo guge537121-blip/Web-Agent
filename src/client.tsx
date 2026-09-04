@@ -5,50 +5,50 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 export const inject = ['slots']
 
 let workspaceRequestStarted = false
-let workspaceMessage = '点击入口后打开 Web-Agent 的共享 DeepSeek 浏览器工作区。'
 
 function startWorkspaceRequest(): void {
   if (workspaceRequestStarted) return
   workspaceRequestStarted = true
   void fetch('/web-agent/workspace/open', { method: 'POST', cache: 'no-store' })
-    .then(async response => {
-      const data = await response.json() as { ok?: boolean; url?: string; title?: string; error?: string }
-      if (!response.ok || data.ok !== true) throw new Error(data.error ?? `HTTP ${response.status}`)
-      workspaceMessage = `浏览器工作区已打开：${data.title || data.url || 'DeepSeek Web'}`
-    })
-    .catch(error => {
-      workspaceRequestStarted = false
-      workspaceMessage = `打开失败：${error instanceof Error ? error.message : String(error)}`
-    })
+    .catch(() => { workspaceRequestStarted = false })
 }
 
-function WebAgentPanel() {
-  startWorkspaceRequest()
+/** Small official-sidebar action. The browser itself is the Web-Agent workspace. */
+function WebAgentAction(props: { wide?: boolean }) {
   return createElement(
-    'div',
-    { style: { height: '100%', boxSizing: 'border-box', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px', fontFamily: 'system-ui, sans-serif' } },
-    createElement('div', { style: { fontSize: '16px', fontWeight: 700 } }, '🌐 Web-Agent'),
-    createElement('div', { style: { opacity: 0.72, lineHeight: 1.45, fontSize: '13px' } }, '用户与 Agent 共用同一个真实 DeepSeek 浏览器工作区。'),
-    createElement('div', { style: { padding: '12px', borderRadius: '9px', background: 'var(--dsh-bg-elevated, rgba(127,127,127,.10))', lineHeight: 1.5, fontSize: '13px' } }, workspaceMessage),
-    createElement('button', {
+    'button',
+    {
       type: 'button',
-      onClick: () => { workspaceRequestStarted = false; startWorkspaceRequest() },
-      style: { border: '1px solid var(--dsh-border, rgba(127,127,127,.28))', borderRadius: '8px', padding: '8px 10px', cursor: 'pointer', background: 'var(--dsh-bg-elevated, rgba(127,127,127,.08))', color: 'inherit' },
-    }, '显示 / 恢复浏览器工作区'),
-    createElement('div', { style: { marginTop: 'auto', fontSize: '11px', opacity: 0.55, lineHeight: 1.45 } }, '浏览器登录态和当前页面由共享 Browser Session 保存；Agent 工具直接操作这个 Session。'),
+      title: 'Web-Agent / DeepSeek',
+      'aria-label': '打开 Web-Agent DeepSeek 浏览器工作区',
+      onClick: () => startWorkspaceRequest(),
+      style: {
+        width: props.wide === false ? '40px' : '100%',
+        minHeight: '36px',
+        boxSizing: 'border-box',
+        border: '1px solid var(--dsh-border, rgba(127,127,127,.22))',
+        borderRadius: '8px',
+        padding: '7px 10px',
+        cursor: 'pointer',
+        background: 'var(--dsh-bg-elevated, rgba(127,127,127,.08))',
+        color: 'inherit',
+        fontSize: '13px',
+        textAlign: 'left',
+      },
+    },
+    props.wide === false ? '🌐' : '🌐 Web-Agent',
   )
 }
 
 /**
- * Register only the official DSH sidebar extension point. This removes the
- * runtime dependency on dsh-better-sidebar: Web-Agent is now a standalone
- * plugin from the user's point of view.
+ * Web-Agent uses only the official DSH slot contract. No dsh-better-sidebar
+ * runtime is required. The browser implementation remains host-side and is
+ * shared by the user and every Web-Agent browser tool.
  */
 export function apply(ctx: Context): void {
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',
     id: 'web-agent',
     order: 40,
-    inject: () => ({}),
-  }, () => createElement(WebAgentPanel)))
+  }, WebAgentAction))
 }
