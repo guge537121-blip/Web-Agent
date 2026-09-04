@@ -1,10 +1,11 @@
 import { createElement } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 
-export const inject = ['betterSidebar']
+export const inject = ['slots']
 
 let workspaceRequestStarted = false
-let workspaceMessage = '点击此入口会打开 Web-Agent 的共享浏览器工作区。'
+let workspaceMessage = '点击入口后打开 Web-Agent 的共享 DeepSeek 浏览器工作区。'
 
 function startWorkspaceRequest(): void {
   if (workspaceRequestStarted) return
@@ -22,83 +23,32 @@ function startWorkspaceRequest(): void {
 }
 
 function WebAgentPanel() {
-  // The tab itself is the entry point: mounting it starts the host-side
-  // session. The browser window is the same session later used by every tool.
   startWorkspaceRequest()
-
   return createElement(
     'div',
-    {
-      style: {
-        height: '100%',
-        boxSizing: 'border-box',
-        padding: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-        fontFamily: 'system-ui, sans-serif',
-      },
-    },
-    createElement('div', { style: { fontSize: '18px', fontWeight: 700 } }, '🌐 Web-Agent'),
-    createElement('div', { style: { opacity: 0.72, lineHeight: 1.5 } }, 'DeepSeek Web 共享浏览器工作区'),
-    createElement(
-      'div',
-      {
-        style: {
-          padding: '14px',
-          borderRadius: '10px',
-          background: 'var(--dsh-bg-elevated, rgba(127,127,127,.10))',
-          lineHeight: 1.6,
-        },
-      },
-      createElement('div', { style: { fontWeight: 600, marginBottom: '6px' } }, '浏览器工作区'),
-      createElement('div', { style: { opacity: 0.78, fontSize: '13px' } }, workspaceMessage),
-    ),
-    createElement(
-      'button',
-      {
-        type: 'button',
-        onClick: () => {
-          workspaceRequestStarted = false
-          startWorkspaceRequest()
-        },
-        style: {
-          border: '1px solid var(--dsh-border, rgba(127,127,127,.28))',
-          borderRadius: '8px',
-          padding: '9px 12px',
-          cursor: 'pointer',
-          background: 'var(--dsh-bg-elevated, rgba(127,127,127,.08))',
-          color: 'inherit',
-        },
-      },
-      '显示 / 恢复浏览器工作区',
-    ),
-    createElement(
-      'div',
-      { style: { marginTop: 'auto', fontSize: '12px', opacity: 0.55, lineHeight: 1.5 } },
-      'Agent 与你共用同一个 Browser Session。你在浏览器中的登录、点击和输入都会成为 Agent 可以观察到的当前页面状态；Agent 的操作也直接发生在这个浏览器工作区。',
-    ),
+    { style: { height: '100%', boxSizing: 'border-box', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px', fontFamily: 'system-ui, sans-serif' } },
+    createElement('div', { style: { fontSize: '16px', fontWeight: 700 } }, '🌐 Web-Agent'),
+    createElement('div', { style: { opacity: 0.72, lineHeight: 1.45, fontSize: '13px' } }, '用户与 Agent 共用同一个真实 DeepSeek 浏览器工作区。'),
+    createElement('div', { style: { padding: '12px', borderRadius: '9px', background: 'var(--dsh-bg-elevated, rgba(127,127,127,.10))', lineHeight: 1.5, fontSize: '13px' } }, workspaceMessage),
+    createElement('button', {
+      type: 'button',
+      onClick: () => { workspaceRequestStarted = false; startWorkspaceRequest() },
+      style: { border: '1px solid var(--dsh-border, rgba(127,127,127,.28))', borderRadius: '8px', padding: '8px 10px', cursor: 'pointer', background: 'var(--dsh-bg-elevated, rgba(127,127,127,.08))', color: 'inherit' },
+    }, '显示 / 恢复浏览器工作区'),
+    createElement('div', { style: { marginTop: 'auto', fontSize: '11px', opacity: 0.55, lineHeight: 1.45 } }, '浏览器登录态和当前页面由共享 Browser Session 保存；Agent 工具直接操作这个 Session。'),
   )
 }
 
+/**
+ * Register only the official DSH sidebar extension point. This removes the
+ * runtime dependency on dsh-better-sidebar: Web-Agent is now a standalone
+ * plugin from the user's point of view.
+ */
 export function apply(ctx: Context): void {
-  ctx.effect(() => {
-    const sidebar = ctx.get('betterSidebar') as {
-      registerTab: (descriptor: {
-        id: string
-        title: string
-        order?: number
-        single?: boolean
-        component: (props: unknown) => unknown
-      }) => () => void
-    }
-    if (!sidebar) return
-    return sidebar.registerTab({
-      id: 'web-agent:deepseek',
-      title: 'Web-Agent',
-      order: 40,
-      single: true,
-      component: () => createElement(WebAgentPanel),
-    })
-  }, 'web-agent: sidebar tab')
+  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+    name: 'sidebar.footer.action',
+    id: 'web-agent',
+    order: 40,
+    inject: () => ({}),
+  }, () => createElement(WebAgentPanel)))
 }
