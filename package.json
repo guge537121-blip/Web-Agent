@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-agent",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "DeepSeek Web Agent plugin for DSH, built on the real-browser capability",
   "type": "module",
   "main": "lib/index.js",
