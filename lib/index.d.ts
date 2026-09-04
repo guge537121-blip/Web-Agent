@@ -4,5 +4,5 @@ export declare const inject: string[];
 export interface Config {
     readonly deepseekUrl?: string;
 }
-/** M0/M1: DeepSeek Web entry point plus explicit browser-control bridge. */
+/** One persistent visible browser workspace shared by the human and the agent. */
 export declare function apply(ctx: Context, config?: Config): void;
