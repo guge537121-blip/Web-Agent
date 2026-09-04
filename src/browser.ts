@@ -9,26 +9,18 @@ import {
 export const name = 'web-agent-browser'
 
 /**
- * Web-Agent owns the browser composition. If another browser provider is
- * already present, we reuse it instead of registering duplicate `browser`
- * services/providers. Normally this plugin creates the browser seam and the
- * Electron provider itself, so users do not need to install dsh-builtin-browser
- * as a separate bundle.
+ * Compose the browser implementation inside Web-Agent. If another plugin has
+ * already provided `browser`, Web-Agent reuses that service and does not add a
+ * second Electron provider. In the normal installation this plugin creates
+ * the BrowserRuntime and its self-hosted visible Electron provider itself.
  */
 export function apply(ctx: Context): void {
-  if (ctx.get('browser') === undefined) {
-    ctx.plugin(BrowserRuntime)
-  }
+  const alreadyProvided = ctx.get('browser') !== undefined
+  if (alreadyProvided) return
 
+  ctx.plugin(BrowserRuntime)
   ctx.inject(['browser'], (browserCtx) => {
-    // If an external dsh-builtin-browser already owns a usable provider, do
-    // not create a second provider. Otherwise Web-Agent creates its own
-    // self-hosted Electron provider and therefore owns the visible workspace.
-    const runtime = browserCtx.get('browser') as BrowserRuntime & {
-      registerBrowserProvider?: (provider: unknown) => () => void
-    }
-    if (runtime === undefined || runtime.registerBrowserProvider === undefined) return
-
+    const runtime = browserCtx.get('browser') as BrowserRuntime
     const host = new RemoteElectronViewHost(defaultHostMainPath())
     const unregister = runtime.registerBrowserProvider(new ElectronBrowserProvider(host))
 
