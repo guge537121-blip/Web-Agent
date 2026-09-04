@@ -1,75 +1,46 @@
-# Native Desktop Browser Host
+# Desktop Browser Host — obsolete route
 
-## Why this exists
+This document describes the earlier plan that required modifying DSH Desktop to expose a new `desktopBrowser` capability.
 
-M0 currently proves that Web-Agent can open the real DeepSeek Web site through `dsh-builtin-browser`, but the current fallback is a separate Electron window. A third-party DSH plugin must not reach into private Electron `BrowserWindow`/`WebContentsView` objects.
+**That is no longer the Web-Agent roadmap.** Web-Agent deliberately does not modify DSH Desktop.
 
-To make the browser a real in-app surface, the Desktop host must expose a small public capability to plugins. The capability owns the native `WebContentsView`; Web-Agent only requests navigation and visibility.
+## Current design
 
-## Required host capability
-
-Recommended service name: `desktopBrowser`.
-
-The plugin-facing contract is intentionally structural:
-
-```ts
-interface DesktopBrowserService {
-  create(input: {
-    id: string
-    url: string
-    title?: string
-  }): Promise<{ id: string }>
-  navigate(id: string, url: string): Promise<void>
-  show(id: string): Promise<void>
-  hide(id: string): Promise<void>
-  close(id: string): Promise<void>
-  isAvailable(): boolean
-}
-```
-
-The Desktop main process implements this service with `WebContentsView` (or the current supported native browser surface). The renderer/client never receives the raw Electron object.
-
-## Delivery model
+Web-Agent owns one visible browser workspace using the self-hosted Electron path already implemented by `dsh-browser`:
 
 ```text
-Web-Agent plugin
-      |
-      | public service
-      v
-DesktopBrowserService
-      |
-      | IPC / host-owned bridge
-      v
-DSH Desktop main process
-      |
-      v
-WebContentsView
-      |
-      v
+Web-Agent Sidebar entry
+        ↓
+/web-agent/workspace/open
+        ↓
+Web-Agent Browser Session
+        ↓
+RemoteElectronViewHost
+        ↓
+Electron BrowserWindow / WebContentsView
+        ↓
 chat.deepseek.com
+        ↑
+Agent browser tools
 ```
 
-The existing `ctx.browser` provider remains the automation layer. The native host service is only the visual delivery surface. This keeps browser automation and UI hosting separate.
+The browser window is not a second Agent-only page. It is the **shared workspace**: the user sees it and the Agent operates the same Browser Session.
 
-## Required DSH Desktop changes
+## Why the old plan was abandoned
 
-1. Register `desktopBrowser` before plugin activation.
-2. Create one host-owned `WebContentsView` per browser surface.
-3. Attach/detach the view to the main DSH window when `show`/`hide` is called.
-4. Compute the browser view bounds from the DSH content/layout area.
-5. Keep all Electron objects in the main process.
-6. Expose only the narrow service above to plugins.
-7. On plugin unload, destroy the WebContentsView and browser session.
+The old plan required a new Desktop-native capability and therefore required changing the Desktop host. The existing `dsh-browser` implementation already has a supported self-hosted fallback, so Web-Agent can reach the product goal without modifying DSH Desktop.
 
-## Compatibility behavior
+## What Web-Agent does instead
 
-Web-Agent must continue to work when `desktopBrowser` is absent. In that case it uses the existing real-browser provider, which may open a separate Electron window.
+- Uses `dsh-browser` as an internal implementation dependency.
+- Mounts `BrowserRuntime` from `src/browser.ts`.
+- Creates the Electron provider through `RemoteElectronViewHost`.
+- Stores one `workspaceSession` in the Web-Agent Host fiber.
+- Opens that session from the Sidebar through the ordinary DSH `webServer` route.
+- Sends every Web-Agent browser action to that same session.
 
-This means the plugin can be installed into ordinary DSH first and automatically gains the in-app surface when a compatible Desktop host is present.
+## Important distinction
 
-## Security
+`DSH-better-sidebar`'s iframe browser is intentionally not used as the Agent page. An iframe and the Electron Browser Session are different browser contexts; using both would recreate the original bug where the user sees one DeepSeek page while the Agent controls another.
 
-- Never expose `BrowserWindow`, `WebContents`, `WebContentsView`, `session`, or Electron IPC primitives directly to a plugin.
-- DeepSeek login cookies remain in the browser session/profile owned by the browser provider.
-- Navigation must remain restricted to the browser provider's existing policy.
-- Do not implement the native surface with an iframe and call it a Chromium browser; an iframe is a different capability and is insufficient for the target agent behavior.
+No DSH Desktop source changes are required by the current roadmap.
