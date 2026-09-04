@@ -1,7 +1,6 @@
-# Web-Agent owns its browser composition so users do not need to install
-# dsh-builtin-browser as a separate bundle. The upstream browser package is
-# used as an implementation dependency, while the loader entries are owned
-# by this plugin and use unique IDs to avoid collisions with other bundles.
+# Web-Agent owns its browser composition. No dsh-builtin-browser or
+# dsh-better-sidebar runtime is required. The browser seam and the visible
+# Electron workspace provider are both implemented by this plugin.
 - insert:
     - id: web-agent-browser
       name: dsh-web-agent/browser
