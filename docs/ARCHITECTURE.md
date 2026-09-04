@@ -1,128 +1,181 @@
 # Web-Agent Architecture
 
-## 1. Browser capability seam
+## 1. Product contract
 
-Browser is an independent capability:
+Web-Agent provides one **shared real-browser workspace**. The user and the Agent never get separate DeepSeek pages.
 
 ```text
-Agent / Tools
-     │
-     ▼
+Sidebar entry
+    ↓
+Web-Agent workspace
+    ↓
+one Browser Session
+    ↓
+visible Electron browser
+    ↓
+chat.deepseek.com
+    ↑
+Agent browser actions
+```
+
+The sidebar is the entry/control surface. The browser workspace is the actual page surface that both sides share.
+
+## 2. Browser capability seam
+
+Web-Agent uses the `dsh-browser` implementation as an internal dependency:
+
+```text
+Web-Agent
+    │
+    ▼
+BrowserRuntime / ctx.browser
+    │
+    ▼
+ElectronBrowserProvider
+    │
+    ▼
+RemoteElectronViewHost
+    │
+    ▼
+Electron BrowserWindow / WebContentsView
+```
+
+The implementation is composed by `src/browser.ts`, so users do not need to install the `dsh-builtin-browser` bundle separately.
+
+## 3. Shared session
+
+The host keeps one `workspaceSession` for the lifetime of the Web-Agent plugin fiber.
+
+All of these tools default to that session:
+
+```text
+web_agent_workspace
+web_agent_navigate
+web_agent_snapshot
+web_agent_click
+web_agent_fill
+web_agent_key
+web_agent_scroll
+web_agent_send_deepseek
+```
+
+An explicit session can still be supplied for diagnostic/advanced use, but the normal Web-Agent workflow is intentionally one shared workspace.
+
+## 4. Sidebar integration
+
+The client registers one Better Sidebar tab:
+
+```text
+Web-Agent
+    ↓
+mount tab
+    ↓
+POST /web-agent/workspace/open
+    ↓
+create/recover workspace session
+```
+
+The tab does not render a second DeepSeek iframe. This is deliberate: the iframe browser supplied by `DSH-better-sidebar` would be a different browser context from the Electron Session used by the Agent.
+
+## 5. DeepSeek Web adapter
+
+DeepSeek-specific behavior remains above the browser layer:
+
+```text
+DeepSeek Web behavior
+        ↓
+Web-Agent tools / adapter
+        ↓
 ctx.browser
-     │
-     ▼
-Browser Provider
-     │
- ┌───┴────────────┐
- │                │
-Electron/CDP    future provider
 ```
 
-The seam owns session identity and lifecycle. A provider owns the actual browser implementation.
+The browser provider does not contain DeepSeek selectors. `web_agent_send_deepseek` performs the DeepSeek-specific composer/send-button verification.
 
-## 2. Tool layer
+## 6. Agent loop
 
-The model-facing layer exposes stable browser tools. It should not know whether the backend is Electron, Chromium, remote CDP, or another provider.
-
-Recommended tools:
+The Agent observes and acts on the same session:
 
 ```text
-browser_open
-browser_snapshot
-browser_a11y
-browser_screenshot
-browser_click
-browser_type
-browser_key
-browser_scroll
-browser_wait
-browser_execute
-browser_content
-browser_list_tabs
-browser_switch_tab
-browser_close_tab
-```
-
-The current `dsh-browser` reference project follows this separation: a `ctx.browser` seam, an Electron provider, and a separate `tool-browser` package. Its bundle patch mounts these components independently.
-
-## 3. DeepSeek Web Adapter
-
-The Adapter is deliberately above Browser Runtime:
-
-```text
-Agent Loop
-   │
-   ▼
-DeepSeekWebAdapter
-   │
-   ▼
-ctx.browser
-```
-
-It knows DeepSeek-specific page structure. Browser Runtime does not.
-
-## 4. Agent Loop
-
-The Agent Loop is responsible for orchestration only:
-
-```text
-observe
-  ↓
+snapshot
+   ↓
 decide
-  ↓
-action
-  ↓
+   ↓
+click / fill / key / scroll
+   ↓
+snapshot
+   ↓
+continue
+```
+
+The human can intervene directly in the visible browser between any two Agent actions.
+
+## 7. Desktop integration boundary
+
+Web-Agent does **not** modify DSH Desktop and does not consume private Electron APIs. It uses the public DSH plugin surface and the self-hosted Electron browser path already provided by `dsh-browser`.
+
+If a compatible external browser service already provides `ctx.browser`, Web-Agent reuses it instead of registering a second browser service.
+
+## 8. Security
+
+- Only HTTP(S) navigation is expected from the browser provider.
+- DeepSeek login state stays inside the browser provider's session/profile.
+- The plugin does not read the user's normal Chrome/Edge password store.
+- The browser window is visible so the user can observe and take over Agent actions.
+- Browser provider restrictions remain the authority for navigation and browser actions.
+
+## 9. Roadmap
+
+### M0 — shared workspace
+
+- [x] Sidebar entry
+- [x] Internal BrowserRuntime composition
+- [x] Self-hosted Electron provider
+- [x] One persistent workspace session
+- [x] Sidebar opens/reuses the workspace
+- [x] Agent tools use the same session
+
+### M1 — full browser workspace
+
+- [ ] Browser toolbar
+- [ ] Back / forward / reload
+- [ ] Tabs
+- [ ] Session restoration
+
+### M2 — full browser tool set
+
+- [ ] screenshot
+- [ ] content
+- [ ] execute
+- [ ] tab management
+- [ ] history/replay
+- [ ] auth
+- [ ] challenge detection
+- [ ] download
+
+### M3 — DeepSeek Web adapter
+
+- [ ] composer detection
+- [ ] stable submit detection
+- [ ] generation-state detection
+- [ ] assistant reply extraction
+- [ ] stop generation
+
+### M4 — Web Agent loop
+
+```text
+DeepSeek Web
+     ↓
+Agent instruction
+     ↓
 observe
+     ↓
+decide
+     ↓
+act
+     ↓
+DSH tool / browser
+     ↓
+result
+     ↓
+DeepSeek Web
 ```
-
-It should not contain Electron calls or DeepSeek selectors.
-
-## 5. DSH Tool Bridge
-
-The bridge resolves an Agent tool request against DSH's existing tool registry:
-
-```text
-Web Agent
-   │
-   ├── browser tool
-   ├── filesystem tool
-   ├── terminal tool
-   └── git tool
-```
-
-The bridge must not silently invent or elevate permissions.
-
-## 6. Browser session isolation
-
-Each Agent task gets a browser session identity. A task's browser state must not accidentally leak into another task.
-
-The browser profile should be dedicated to Web-Agent. Do not copy the user's main Chrome profile or password database.
-
-## 7. Desktop integration
-
-Preferred integration order:
-
-1. Use a published DSH Desktop host capability if one is available and stable.
-2. Otherwise run a real browser host separately and expose a DSH-compatible viewport/control channel.
-3. Do not cast an Electron `Session` as `webContents`.
-4. Do not modify dsh-desktop core merely to bypass plugin boundaries.
-
-## 8. Data flow
-
-```text
-Human
-  │
-  ├───────────────┐
-  │               │
-  ▼               ▼
-DSH UI         Real Browser
-  │               │
-  │          chat.deepseek.com
-  │               │
-  └──── Agent ────┘
-          │
-          ▼
-      DSH Tools
-```
-
-The browser remains a normal web session. The Agent sees structured observations and performs explicit actions.
