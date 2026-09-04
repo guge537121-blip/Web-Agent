@@ -1,50 +1,55 @@
 import { createElement } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context } from '@deepseek-ai/cordis'
+import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 
 export const inject = ['slots']
 
-let workspaceRequestStarted = false
+type WebAgentActionProps = PropsRuntime<'sidebar.footer.action'>
 
-function startWorkspaceRequest(): void {
-  if (workspaceRequestStarted) return
-  workspaceRequestStarted = true
-  void fetch('/web-agent/workspace/open', { method: 'POST', cache: 'no-store' })
-    .catch(() => { workspaceRequestStarted = false })
+let opening = false
+
+async function openWorkspace(): Promise<void> {
+  if (opening) return
+  opening = true
+  try {
+    const response = await fetch(`${window.location.origin}/web-agent/workspace/open`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    })
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      console.error(`[dsh-web-agent] workspace open failed (${response.status})`, body)
+      return
+    }
+    const result = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null
+    if (!result?.ok) console.error('[dsh-web-agent] workspace open failed', result?.error ?? result)
+  } catch (error) {
+    console.error('[dsh-web-agent] workspace request failed', error)
+  } finally {
+    opening = false
+  }
 }
 
-/** Small official-sidebar action. The browser itself is the Web-Agent workspace. */
-function WebAgentAction(props: { wide?: boolean }) {
+function WebAgentAction({ wide }: WebAgentActionProps) {
   return createElement(
-    'button',
+    Button,
     {
+      variant: 'ghost',
       type: 'button',
       title: 'Web-Agent / DeepSeek',
       'aria-label': '打开 Web-Agent DeepSeek 浏览器工作区',
-      onClick: () => startWorkspaceRequest(),
-      style: {
-        width: props.wide === false ? '40px' : '100%',
-        minHeight: '36px',
-        boxSizing: 'border-box',
-        border: '1px solid var(--dsh-border, rgba(127,127,127,.22))',
-        borderRadius: '8px',
-        padding: '7px 10px',
-        cursor: 'pointer',
-        background: 'var(--dsh-bg-elevated, rgba(127,127,127,.08))',
-        color: 'inherit',
-        fontSize: '13px',
-        textAlign: 'left',
-      },
+      'data-wide': wide,
+      icon: '🌐',
+      onClick: () => { void openWorkspace() },
     },
-    props.wide === false ? '🌐' : '🌐 Web-Agent',
+    wide ? 'Web-Agent' : null,
   )
 }
 
-/**
- * Web-Agent uses only the official DSH slot contract. No dsh-better-sidebar
- * runtime is required. The browser implementation remains host-side and is
- * shared by the user and every Web-Agent browser tool.
- */
 export function apply(ctx: Context): void {
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',
