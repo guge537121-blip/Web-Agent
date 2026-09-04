@@ -15,17 +15,38 @@ export class BrowserRuntime extends Service {
   constructor(ctx: Context, config: { browserProvider?: string } = {}) { super(ctx, 'browser'); this.providerId = config.browserProvider }
   registerBrowserProvider(provider: Provider) { if (this.providers.has(provider.id)) throw new BrowserError(`browser provider "${provider.id}" already registered`, 'BROWSER_DUPLICATE_PROVIDER'); this.providers.set(provider.id, provider); return () => this.providers.delete(provider.id) }
   resolveProvider() { if (this.providerId) { const p=this.providers.get(this.providerId); if(!p) throw new BrowserError(`browser provider "${this.providerId}" is not registered`,'BROWSER_PROVIDER_MISSING'); if(!p.available()) throw new BrowserError(`browser provider "${this.providerId}" is unavailable`,'BROWSER_PROVIDER_UNAVAILABLE'); return p } const usable=[...this.providers.values()].filter(p=>p.available()); if(usable.length!==1) throw new BrowserError(usable.length===0?'no usable browser provider is registered':'multiple usable browser providers are registered',usable.length===0?'BROWSER_PROVIDER_UNAVAILABLE':'BROWSER_PROVIDER_AMBIGUOUS'); return usable[0] }
-  open(l?: string){return this.resolveProvider().open(l)} openUrl(s:string,r:any){return this.resolveProvider().openUrl(s,r)} navigate(s:string,r:any){return this.resolveProvider().navigate(s,r)} snapshot(s:string){return this.resolveProvider().snapshot(s)} click(s:string,r:any){return this.resolveProvider().click(s,r)} fillForm(s:string,r:any){return this.resolveProvider().fillForm(s,r)} key(s:string,r:any){return this.resolveProvider().key(s,r)} scroll(s:string,r:any){return this.resolveProvider().scroll(s,r)} close(s:string){return this.resolveProvider().close(s)}
+  open(l?:string){return this.resolveProvider().open(l)} openUrl(s:string,r:any){return this.resolveProvider().openUrl(s,r)} navigate(s:string,r:any){return this.resolveProvider().navigate(s,r)} snapshot(s:string){return this.resolveProvider().snapshot(s)} click(s:string,r:any){return this.resolveProvider().click(s,r)} fillForm(s:string,r:any){return this.resolveProvider().fillForm(s,r)} key(s:string,r:any){return this.resolveProvider().key(s,r)} scroll(s:string,r:any){return this.resolveProvider().scroll(s,r)} close(s:string){return this.resolveProvider().close(s)}
 }
+
 class RpcClient {
-  private nextId=1; private socket?:Socket; private buffer=''; private readonly pending=new Map<number,{resolve:(v:any)=>void;reject:(e:Error)=>void}>()
+  private nextId=1; private socket?:Socket; private buffer=''; private readonly pending=new Map<number,{resolve:(v:any)=>void;reject:(e:Error)=>void}>(); private hello?:Promise<any>
   constructor(private readonly hostMain:string,private readonly executable:string){}
-  async start(){const server=createServer();await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>resolve())});const address=server.address();const port=typeof address==='object'&&address?address.port:0;const token=randomBytes(24).toString('hex');const child=spawn(this.executable,[this.hostMain,'--rpc-port',String(port),'--rpc-token',token],{stdio:['ignore','ignore','pipe'],windowsHide:false,env:{...process.env,DSH_WEB_AGENT_RPC_TOKEN:token}});child.stderr.setEncoding('utf8');child.stderr.on('data',d=>process.stderr.write(`[web-agent browser] ${String(d)}`));child.on('exit',(c,s)=>this.fail(new Error(`browser host exited (${String(c)}, ${String(s)})`)));this.socket=await new Promise<Socket>((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('browser host connection timeout')),20000);server.once('connection',s=>{clearTimeout(timer);resolve(s)});child.once('error',reject)});server.close();this.socket.setEncoding('utf8');this.socket.on('data',d=>this.onData(String(d)));this.socket.on('error',e=>this.fail(e));this.socket.on('close',()=>this.fail(new Error('browser host connection closed')));const hello=await this.waitHello();if(hello.token!==token)throw new Error('browser host authentication failed');await this.call('ping')}
-  private waitHello(){return new Promise<any>((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('browser host hello timeout')),10000);const handler=(data:string)=>{for(const line of data.split('\n')){if(!line.trim())continue;try{const msg=JSON.parse(line);if(msg.op==='hello'){clearTimeout(timer);this.socket?.off('data',handler);resolve(msg);return}}catch{}}};this.socket?.on('data',handler)})}
-  async call(op:string,payload:Record<string,any>={}){if(!this.socket)throw new Error('browser host is not connected');const id=this.nextId++;return new Promise((resolve,reject)=>{this.pending.set(id,{resolve,reject});this.socket?.write(JSON.stringify({id,op,...payload})+'\n')})}
+  async start(){
+    const server=createServer();
+    await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>resolve())})
+    const address=server.address(); const port=typeof address==='object'&&address?address.port:0; const token=randomBytes(24).toString('hex')
+    const child=spawn(this.executable,[this.hostMain,'--rpc-port',String(port),'--rpc-token',token],{stdio:['ignore','ignore','pipe'],windowsHide:false,env:{...process.env,DSH_WEB_AGENT_RPC_TOKEN:token}})
+    child.stderr.setEncoding('utf8'); child.stderr.on('data',d=>process.stderr.write(`[web-agent browser] ${String(d)}`)); child.on('exit',(c,s)=>this.fail(new Error(`browser host exited (${String(c)}, ${String(s)})`)))
+    const helloResolve = await new Promise<{socket:Socket;hello:any}>((resolve,reject)=>{
+      const timer=setTimeout(()=>reject(new Error('browser host connection timeout')),20000)
+      const onConnection=(socket:Socket)=>{
+        clearTimeout(timer); socket.setEncoding('utf8');
+        let helloBuffer='';
+        const onHello=(data:string)=>{helloBuffer+=data; for(const line of helloBuffer.split('\n')){if(!line.trim())continue;try{const msg=JSON.parse(line);if(msg.op==='hello'){socket.off('data',onHello);resolve({socket,hello:msg});return}}catch{}}}
+        socket.on('data',onHello); socket.once('error',reject); socket.once('close',()=>reject(new Error('browser host connection closed before hello')))
+      }
+      server.once('connection',onConnection); child.once('error',reject)
+    })
+    server.close(); this.socket=helloResolve.socket; this.socket.setEncoding('utf8');
+    this.socket.on('data',d=>this.onData(String(d))); this.socket.on('error',e=>this.fail(e)); this.socket.on('close',()=>this.fail(new Error('browser host connection closed')))
+    if(helloResolve.hello.token!==token) throw new Error('browser host authentication failed')
+    await this.call('ping')
+  }
+  call(op:string,payload:Record<string,any>={}){if(!this.socket)throw new Error('browser host is not connected');const id=this.nextId++;return new Promise((resolve,reject)=>{this.pending.set(id,{resolve,reject});this.socket?.write(JSON.stringify({id,op,...payload})+'\n')})}
   private onData(data:string){this.buffer+=data;let at=this.buffer.indexOf('\n');while(at>=0){const line=this.buffer.slice(0,at).trim();this.buffer=this.buffer.slice(at+1);at=this.buffer.indexOf('\n');if(!line)continue;try{const msg=JSON.parse(line);if(msg.op==='hello')continue;const p=this.pending.get(msg.id);if(!p)continue;this.pending.delete(msg.id);msg.ok?p.resolve(msg.result):p.reject(new Error(msg.err??'browser host command failed'))}catch{}}}
   private fail(error:Error){for(const p of this.pending.values())p.reject(error);this.pending.clear()} close(){try{this.socket?.destroy()}catch{}}
 }
+
 class SharedElectronProvider implements Provider {
   readonly id='web-agent-electron'; private client?:RpcClient; private session?:string; private starting?:Promise<void>; private readonly hostMain:string; private readonly executable:string
   constructor(){this.hostMain=fileURLToPath(new URL('../browser-host.cjs',import.meta.url));this.executable=this.resolveElectron()}
