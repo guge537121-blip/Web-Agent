@@ -1,10 +1,16 @@
 {
   "name": "dsh-web-agent",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "DeepSeek Web Agent plugin for DSH, built on the real-browser capability",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
+  "exports": {
+    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
+    "./client": { "default": "./lib/client.js" },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
   "files": ["lib", "src", "cordis.patch.yml", "tsdown.config.ts", "README.md", "docs"],
   "scripts": {
     "build": "tsc -p tsconfig.json && tsdown",
