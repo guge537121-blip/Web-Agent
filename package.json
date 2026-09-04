@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-agent",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "DSH Web Agent with one shared visible browser workspace for the user and agent.",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -20,7 +20,8 @@
     "@deepseek-ai/schemastery": ">=3.18.0",
     "@deepseek-ai/dsh-client-ui-renderer": ">=0.1.2-rc.1",
     "@deepseek-ai/dsh-client-ui-sidebar": ">=0.1.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.2-rc.1"
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.2-rc.1"
   },
   "dependencies": { "electron": "44.2.0" },
   "dsh": {
