@@ -1,11 +1,10 @@
 import type { UserConfig } from 'tsdown'
 
-const CLIENT_EXTERNALS = [
-  'react',
-  'react/jsx-runtime',
-  '@deepseek-ai/cordis',
-]
-
+/**
+ * DSH Client modules run inside window.__ModuleLoader__.load() which
+ * provides a CJS-style `require`. We bundle everything (including react)
+ * so the output has zero ES-module `import` statements.
+ */
 const clientConfig: UserConfig = {
   name: 'dsh-web-agent/client',
   entry: { client: 'src/client.tsx' },
@@ -16,8 +15,6 @@ const clientConfig: UserConfig = {
   dts: false,
   sourcemap: true,
   clean: false,
-  external: CLIENT_EXTERNALS,
-  noExternal: (id: string) => (CLIENT_EXTERNALS.includes(id) ? undefined : true),
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
     'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),
