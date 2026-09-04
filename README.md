@@ -23,7 +23,7 @@ DSH Desktop
            └── filesystem / terminal / git / other DSH tools
 ```
 
-浏览器能力采用独立 capability seam，不把 Agent 逻辑绑死在 Electron 私有 API 上。当前设计参考并复用成熟的 `dsh-browser` 分层：`ctx.browser` 能力层、Electron/CDP provider、model-facing browser tools。该项目当前明确提供 Electron provider 与 `browser_*` 工具层。 
+浏览器能力采用独立 capability seam，不把 Agent 逻辑绑死在 Electron 私有 API 上。当前设计参考并复用成熟的 `dsh-browser` 分层：`ctx.browser` 能力层、Electron/CDP provider、model-facing browser tools。
 
 ## M0 → M4 路线
 
@@ -31,16 +31,19 @@ DSH Desktop
 
 目标：先把“真实浏览器 + DeepSeek Web + 持久登录”跑通。
 
+当前已验证：真实浏览器 provider 可以启动独立 Electron 浏览器并打开 DeepSeek Web。
+
 验收标准：
 
 - DSH 插件能够正常加载。
 - 启动真实浏览器，而不是 iframe 假页面。
 - 自动打开 `https://chat.deepseek.com`。
-- 使用独立持久 profile 保存登录 Cookie。
+- 使用持久 profile 保存登录 Cookie。
 - 用户可以手动登录 DeepSeek。
 - 关闭 DSH 后重新启动，登录状态仍存在。
 - 浏览器可以被用户直接接管。
-- 不修改 dsh-desktop 核心代码。
+
+**M0.7 Native Desktop Browser Host 是下一道门槛：需要 Desktop 宿主提供公开的 `desktopBrowser` 能力，由主进程持有 `WebContentsView` 并把浏览器 surface 放进 DSH 主窗口。** 详见 `docs/DESKTOP-BROWSER-HOST.md`。
 
 ### M1 — Browser Control
 
@@ -127,9 +130,25 @@ DeepSeek Web 的登录态和复杂 Web 应用行为不应该依赖普通 iframe�
 
 本项目核心浏览器必须是真实浏览器上下文，并通过 CDP / WebContents 能力控制页面。
 
-## 为什么不直接修改 dsh-desktop
+## 为什么需要 Desktop Host
 
-DSH Desktop 的普通插件边界应该使用公开的 DSH/Cordis 能力。浏览器运行时作为独立 provider 存在，未来如果 Desktop 提供稳定的 `electronViewHost`，可以直接接入；如果没有，则使用独立 Electron/Chromium host + DSH viewport，不把私有 Electron 对象泄漏到普通插件 renderer。
+普通 DSH 插件不应该直接拿 Electron 的 `BrowserWindow` / `WebContentsView`。因此 Web-Agent 只依赖公开能力 seam。
+
+当 Desktop 提供 `desktopBrowser` 时：
+
+```text
+Web-Agent
+   ↓ public service
+DesktopBrowserService
+   ↓ host IPC
+DSH Desktop main
+   ↓
+WebContentsView
+   ↓
+chat.deepseek.com
+```
+
+没有该能力时，插件继续使用现有真实浏览器 provider，因此不会因为 Desktop Host 尚未升级而完全失效。
 
 ## 开发环境
 
@@ -143,10 +162,11 @@ DSH Desktop 的普通插件边界应该使用公开的 DSH/Cordis 能力。浏�
 - `docs/ARCHITECTURE.md`：模块边界与数据流
 - `docs/DEEPSEEK-WEB.md`：DeepSeek Web Adapter 设计
 - `docs/SECURITY.md`：浏览器、Cookie、工具权限安全原则
-- `docs/TEST-PLAN.md`：每个 milestone 的验收标准
+- `docs/DESKTOP-BROWSER-HOST.md`：原生 DSH 浏览器宿主契约
+- `docs/TEST-M0.md`：M0 验收清单
 
 ## 当前状态
 
-**项目基线：M0 开工。**
+**M0 Browser Runtime：已在你的 DSH Desktop 环境实际验证，能打开独立真实 DeepSeek 浏览器。**
 
-不要把“代码已写”当成“功能已验证”。每个 milestone 都必须在目标 DSH Desktop 环境实际运行后再标记完成。
+**M0.7 Native Desktop Browser Host：未完成。** 下一阶段是把真实 `WebContentsView` 由 Desktop 主进程托管，并通过公开能力让 Web-Agent 将它显示在 DSH 内部。不要把独立浏览器窗口误认为 M0.7 已完成。
