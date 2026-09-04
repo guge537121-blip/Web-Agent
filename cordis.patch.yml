@@ -1,6 +1,9 @@
-# Web-Agent must not register the shared browser stack itself.
-# dsh-builtin-browser owns the `browser`, `browser-electron`, and
-# `tool-browser` loader IDs. Web-Agent only contributes its own bundle.
+# Web-Agent owns its browser composition so users do not need to install
+# dsh-builtin-browser as a separate bundle. The upstream browser package is
+# used as an implementation dependency, while the loader entries are owned
+# by this plugin and use unique IDs to avoid collisions with other bundles.
 - insert:
+    - id: web-agent-browser
+      name: dsh-web-agent/browser
     - id: web-agent
       name: dsh-web-agent
