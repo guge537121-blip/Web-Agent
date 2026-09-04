@@ -1,30 +1,30 @@
-import { createElement, useEffect, useState } from 'react'
+import { createElement } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 
 export const inject = ['betterSidebar']
 
-function WebAgentPanel() {
-  const [status, setStatus] = useState<'opening' | 'ready' | 'error'>('opening')
-  const [detail, setDetail] = useState('正在启动共享浏览器工作区…')
+let workspaceRequestStarted = false
+let workspaceMessage = '点击此入口会打开 Web-Agent 的共享浏览器工作区。'
 
-  const openWorkspace = async () => {
-    setStatus('opening')
-    setDetail('正在启动共享浏览器工作区…')
-    try {
-      const response = await fetch('/web-agent/workspace/open', { method: 'POST', cache: 'no-store' })
+function startWorkspaceRequest(): void {
+  if (workspaceRequestStarted) return
+  workspaceRequestStarted = true
+  void fetch('/web-agent/workspace/open', { method: 'POST', cache: 'no-store' })
+    .then(async response => {
       const data = await response.json() as { ok?: boolean; url?: string; title?: string; error?: string }
       if (!response.ok || data.ok !== true) throw new Error(data.error ?? `HTTP ${response.status}`)
-      setStatus('ready')
-      setDetail(`已连接：${data.title || data.url || 'DeepSeek Web'}。Agent 与你使用同一个浏览器工作区。`)
-    } catch (error) {
-      setStatus('error')
-      setDetail(error instanceof Error ? error.message : String(error))
-    }
-  }
+      workspaceMessage = `浏览器工作区已打开：${data.title || data.url || 'DeepSeek Web'}`
+    })
+    .catch(error => {
+      workspaceRequestStarted = false
+      workspaceMessage = `打开失败：${error instanceof Error ? error.message : String(error)}`
+    })
+}
 
-  useEffect(() => {
-    void openWorkspace()
-  }, [])
+function WebAgentPanel() {
+  // The tab itself is the entry point: mounting it starts the host-side
+  // session. The browser window is the same session later used by every tool.
+  startWorkspaceRequest()
 
   return createElement(
     'div',
@@ -51,14 +51,17 @@ function WebAgentPanel() {
           lineHeight: 1.6,
         },
       },
-      createElement('div', { style: { fontWeight: 600, marginBottom: '6px' } }, status === 'ready' ? '● 工作区已连接' : status === 'error' ? '⚠ 工作区启动失败' : '○ 正在启动'),
-      createElement('div', { style: { opacity: 0.78, fontSize: '13px' } }, detail),
+      createElement('div', { style: { fontWeight: 600, marginBottom: '6px' } }, '浏览器工作区'),
+      createElement('div', { style: { opacity: 0.78, fontSize: '13px' } }, workspaceMessage),
     ),
     createElement(
       'button',
       {
         type: 'button',
-        onClick: () => void openWorkspace(),
+        onClick: () => {
+          workspaceRequestStarted = false
+          startWorkspaceRequest()
+        },
         style: {
           border: '1px solid var(--dsh-border, rgba(127,127,127,.28))',
           borderRadius: '8px',
@@ -68,12 +71,12 @@ function WebAgentPanel() {
           color: 'inherit',
         },
       },
-      status === 'error' ? '重新打开浏览器工作区' : '显示 / 恢复浏览器工作区',
+      '显示 / 恢复浏览器工作区',
     ),
     createElement(
       'div',
       { style: { marginTop: 'auto', fontSize: '12px', opacity: 0.55, lineHeight: 1.5 } },
-      '只有一个 Browser Session。你在浏览器窗口中的操作会立即成为 Agent 的下一次观察结果；Agent 的点击、输入和滚动也会直接发生在这个窗口。',
+      'Agent 与你共用同一个 Browser Session。你在浏览器中的登录、点击和输入都会成为 Agent 可以观察到的当前页面状态；Agent 的操作也直接发生在这个浏览器工作区。',
     ),
   )
 }
