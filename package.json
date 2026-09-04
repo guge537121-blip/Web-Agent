@@ -1,13 +1,14 @@
 {
   "name": "dsh-web-agent",
-  "version": "0.1.6",
-  "description": "DeepSeek Web Agent plugin for DSH, built on the real-browser capability",
+  "version": "0.2.0",
+  "description": "DeepSeek Web Agent for DSH: one persistent visible browser workspace shared by the user and the agent.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {
     ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
     "./client": { "default": "./lib/client.js" },
+    "./browser": { "default": "./lib/browser.js" },
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
@@ -19,7 +20,7 @@
   },
   "engines": { "node": ">=22.19" },
   "dependencies": {
-    "dsh-builtin-browser": "github:wqty123/dsh-browser#master"
+    "dsh-builtin-browser": "github:wqty123/dsh-browser#b26bab0f732ab6300447345a17e6cc42739fa9cc"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
