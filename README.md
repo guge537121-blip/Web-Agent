@@ -2,93 +2,112 @@
 
 DSH 的真实 DeepSeek Web Agent 插件。
 
-> **核心目标：一个浏览器工作区，用户和 Agent 操作同一个页面。**
+> **核心目标：只安装 `dsh-web-agent`，用户和 Agent 共用同一个真实浏览器工作区。**
 
-Web-Agent 不调用 DeepSeek API，也不模拟 DeepSeek Web。点击 DSH 侧边栏的 Web-Agent 后，插件创建或恢复一个可见的真实 Electron 浏览器工作区，并打开 `https://chat.deepseek.com/`。Agent 的浏览器工具与用户看到的浏览器使用同一个 Browser Session。
+Web-Agent 不调用 DeepSeek API，也不模拟 DeepSeek Web。插件使用 DSH 官方 Sidebar Slot 作为入口，并把浏览器运行时、Electron Provider、CDP、Session 与 Agent 浏览器工具作为本插件内部能力组合起来。用户点击 Web-Agent 后创建或恢复一个可见的真实 Electron 浏览器工作区，并打开 `https://chat.deepseek.com/`；Agent 的浏览器工具与用户看到的浏览器使用同一个 Browser Session。
 
-## 现在的架构
+## 单插件架构
 
 ```text
-DSH Sidebar
-    │
-    ▼
-Web-Agent
-    │
-    ├── Web-Agent Browser Runtime
-    │      └── dsh-browser implementation
-    │             └── Electron + CDP
-    │
-    ├── Shared Browser Session
-    │      └── chat.deepseek.com
-    │
-    └── Agent Tools
-           ├── snapshot
-           ├── navigate
-           ├── click
-           ├── fill
-           ├── key
-           ├── scroll
-           └── send_deepseek
+DSH
+└── dsh-web-agent                         ← 用户唯一安装
+     │
+     ├── Official DSH Sidebar Slot       ← 入口
+     │
+     ├── Internal Browser Runtime         ← 从 dsh-browser 拆解/组合
+     │      ├── Electron Provider
+     │      ├── Remote Electron View Host
+     │      ├── Browser Session
+     │      └── CDP control
+     │
+     ├── DeepSeek Web Adapter
+     │
+     └── Agent Browser Tools
+            ├── workspace
+            ├── snapshot
+            ├── navigate
+            ├── click
+            ├── fill
+            ├── key
+            ├── scroll
+            └── send_deepseek
 ```
 
-### 为什么不会再出现两个 DeepSeek
-
-旧实现让 Sidebar 自己显示一个网页，同时 Agent 通过 `dsh-builtin-browser` 创建另一个 Electron 页面，因此用户看到的页面和 Agent 操作的页面不是同一个对象。
-
-新实现只有一个 `workspaceSession`：
+### 用户看到的和 Agent 操作的是同一个页面
 
 ```text
                  workspaceSession
                        │
              ┌─────────┴─────────┐
              ▼                   ▼
-       用户看到的窗口        Agent browser tools
+       用户看到的浏览器       Agent browser tools
              │                   │
              └─────────┬─────────┘
                        ▼
                同一个 DeepSeek
 ```
 
-Sidebar 入口只负责创建/恢复这个 Session，不创建 iframe，也不创建第二个浏览器。
+Sidebar 只负责触发/恢复这个唯一 Session，不创建 iframe，也不创建第二个 DeepSeek。
 
-## 第三方能力整合
+## 第三方能力内置原则
 
-Web-Agent 将 `dsh-browser` 作为内部实现依赖，而不是要求用户单独安装 `dsh-builtin-browser` bundle。Web-Agent 自己的 `cordis.patch.yml` 只挂载 `web-agent-browser` 和 `web-agent` 两个 loader entry；浏览器能力由 `src/browser.ts` 组合到本插件中。
+本项目的目标是**单插件交付**。因此凡是 Web-Agent 自己用到的第三方实现能力，都作为本插件的内部依赖或源码模块使用，而不是要求用户额外安装对应插件。
 
-采用的 `dsh-browser` 技术路线包括：
+### 已内置的浏览器能力
 
-- `BrowserRuntime` / `ctx.browser` capability seam
+`dsh-browser` 的实现作为内部实现依赖使用，主要利用：
+
+- `BrowserRuntime`
 - Electron Browser Provider
 - `RemoteElectronViewHost`
-- Electron BrowserWindow / WebContentsView
-- CDP DOM snapshot / input control
-- 会话生命周期
+- Electron BrowserWindow/WebContentsView
+- CDP DOM snapshot 与输入控制
+- Browser Session 生命周期
 
-`dsh-better-sidebar` 只作为 Sidebar 扩展点使用。它的 iframe BrowserView 没有被用作 Agent 页面，因为 iframe 与 Electron browser session 不是同一个页面。
+它不再通过 `dsh-builtin-browser` 的独立 bundle 挂载到 DSH，因此不会和 Web-Agent 再产生一个 Browser Loader。
+
+### Sidebar
+
+不再依赖 `dsh-better-sidebar`。Web-Agent 使用 DSH 官方 `sidebar.footer.action` Slot 注册入口。DSH 官方 Sidebar 的 Slot Contract 明确提供这个第三方扩展位置；因此 Web-Agent 可以作为独立插件注册自己的入口，而不需要运行另一个 Sidebar 插件。fileciteturn251file3
+
+### DSH 基础运行时
+
+以下包不是需要用户另外安装的“功能插件”，而是 DSH 插件 API/运行时提供的基础能力，因此 Web-Agent 以 peer dependency 方式声明兼容版本：
+
+- `@deepseek-ai/cordis`
+- `@deepseek-ai/dsh-llm`
+- `@deepseek-ai/dsh-tools`
+- `@deepseek-ai/dsh-system-prompt`
+- `@deepseek-ai/schemastery`
+
+Web-Agent 不会把这些运行时复制一份进 DSH，也不会注册第二套 Cordis。
 
 ## 安装
 
-建议先移除旧的独立 `dsh-builtin-browser` bundle，再安装 Web-Agent：
+只安装 Web-Agent：
 
 ```text
-dsh plugin --profile desktop remove dsh-builtin-browser
 dsh plugin --profile desktop add github:guge537121-blip/Web-Agent
+```
+
+旧环境如果已经单独安装过以下插件，可以在测试单插件版本前卸载：
+
+```text
+dsh-builtin-browser
+dsh-web-chat
+dsh-better-sidebar
 ```
 
 然后重启 DSH。
 
-如果旧 bundle 没有安装，直接添加 Web-Agent 即可。
-
-> Web-Agent 的 `package.json` 已将 dsh-browser 固定到经过验证的 commit，而不是跟随 master 自动变化。
-
 ## 使用
 
 1. 启动 DSH。
-2. 点击侧边栏的 **Web-Agent**。
-3. 插件自动请求 `/web-agent/workspace/open`。
-4. 第一次使用会启动可见 Electron 浏览器工作区。
+2. 在官方 Sidebar 中找到 **Web-Agent** 入口。
+3. 点击后请求 `/web-agent/workspace/open`。
+4. 第一次使用创建可见 Electron 浏览器工作区。
 5. 工作区打开 `chat.deepseek.com`。
-6. 你可以直接在这个窗口登录和操作 DeepSeek。
+6. 用户可以直接登录和操作 DeepSeek。
 7. Agent 调用 `web_agent_snapshot` / `web_agent_click` / `web_agent_fill` 等工具时，操作的就是这个窗口。
 
 ## 工具
@@ -126,20 +145,19 @@ click
 确认消息离开输入框 / 出现在聊天记录
 ```
 
-这样可以避免“文字已经填进输入框，但实际上没有发送”的问题。
-
 ## 开发路线
 
-### M0 — 共享浏览器工作区（当前）
+### M0 — 单插件基础（当前）
 
-- [x] Web-Agent Sidebar 入口
-- [x] Web-Agent 自己组合 Browser Runtime
+- [x] 官方 Sidebar Slot 入口
+- [x] 移除 dsh-better-sidebar runtime dependency
+- [x] Web-Agent 内部组合 Browser Runtime
 - [x] Electron provider 自托管
 - [x] 唯一共享 Browser Session
-- [x] Sidebar 点击创建/恢复工作区
 - [x] Agent 工具使用同一 Session
+- [x] dsh-browser 不再作为独立 DSH bundle
 
-### M1 — 完整浏览器工作区
+### M1 — 浏览器工作区
 
 - [ ] 地址栏
 - [ ] 后退 / 前进 / 刷新
@@ -161,7 +179,7 @@ click
 ### M3 — DeepSeek Web Adapter
 
 - [ ] composer 自动识别
-- [ ] 发送按钮稳定识别
+- [x] 发送按钮稳定识别的第一版
 - [ ] 生成状态识别
 - [ ] 回复提取
 - [ ] stop generation
@@ -191,14 +209,9 @@ DeepSeek Web
 ## 重要边界
 
 - 不修改 DSH Desktop 源码。
-- 不依赖 Desktop 私有 Electron API。
+- 不依赖 DSH Desktop 私有 Electron API。
 - 不把 iframe 当成真实 Agent 浏览器。
 - 不同时创建两个 DeepSeek Session。
-- 不要求用户另外安装 dsh-builtin-browser bundle。
-- Electron 子进程属于 Web-Agent 的共享浏览器工作区，不是“Agent 专用的第二个页面”。
-
-## 参考项目
-
-- `wqty123/dsh-browser`：真实可见浏览器、BrowserRuntime、Electron/CDP provider 和人机共享页面的实现基础。
-- `omdsh-dev/DSH-better-sidebar`：Sidebar 第三方扩展和 BrowserView UI 的参考。
-- `anywhere-labs/dsh-desktop`：DSH Desktop 插件边界和客户端/Host contract 的参考。
+- 不要求用户另外安装 `dsh-builtin-browser`。
+- 不要求用户另外安装 `dsh-better-sidebar`。
+- Electron 子进程属于 Web-Agent 的共享浏览器工作区，不是 Agent 专用的第二个页面。
