@@ -1,9 +1,9 @@
 import type { UserConfig } from 'tsdown'
 
 /**
- * DSH Client modules run inside window.__ModuleLoader__.load() which
- * provides a CJS-style `require`. We bundle everything (including react)
- * so the output has zero ES-module `import` statements.
+ * DSH client modules are loaded through window.__ModuleLoader__.load().
+ * React is a platform module supplied by the DSH client module table and must
+ * remain external; bundling a second React copy breaks shared React state.
  */
 const clientConfig: UserConfig = {
   name: 'dsh-web-agent/client',
@@ -15,6 +15,8 @@ const clientConfig: UserConfig = {
   dts: false,
   sourcemap: true,
   clean: false,
+  external: ['react'],
+  noExternal: (id: string) => id === 'react' ? undefined : true,
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
     'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),
